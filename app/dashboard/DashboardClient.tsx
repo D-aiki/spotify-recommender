@@ -9,6 +9,7 @@ interface Playlist {
   description: string;
   images: { url: string }[];
   tracks?: { total: number };
+  items?: { total: number }; // 互換: Spotify レスポンス変動対策
 }
 
 interface Track {
@@ -17,7 +18,6 @@ interface Track {
   artists: { name: string }[];
   album: { name: string; images: { url: string }[]; release_date: string };
   external_urls: { spotify: string };
-  preview_url: string | null;
   duration_ms: number;
 }
 
@@ -88,8 +88,8 @@ export default function DashboardClient() {
   const [recsLoading, setRecsLoading] = useState(false);
   const recsLoaded = useRef(false);
 
-  const [playingId, setPlayingId] = useState<string | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [copied, setCopied] = useState(false);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -130,18 +130,27 @@ export default function DashboardClient() {
     }
   };
 
-  const exportCSV = () => {
+  const buildTableRows = () => {
     const headers = ["#", "お気に入り", "曲名", "アーティスト", "アルバム", "リリース年", "長さ"];
     const rows = playlistTracks.map((track, i) => [
-      i + 1,
+      String(i + 1),
       track.liked ? "♥" : "",
-      `"${track.name.replace(/"/g, '""')}"`,
-      `"${track.artists.map((a) => a.name).join(", ").replace(/"/g, '""')}"`,
-      `"${track.album.name.replace(/"/g, '""')}"`,
+      track.name,
+      track.artists.map((a) => a.name).join(", "),
+      track.album.name,
       track.album.release_date?.slice(0, 4) ?? "",
       msToTime(track.duration_ms),
     ]);
-    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    return { headers, rows };
+  };
+
+  const exportCSV = () => {
+    const { headers, rows } = buildTableRows();
+    const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    const csv = [
+      headers.map(escape).join(","),
+      ...rows.map((r) => r.map(escape).join(",")),
+    ].join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -151,21 +160,18 @@ export default function DashboardClient() {
     URL.revokeObjectURL(url);
   };
 
-  const togglePreview = (track: Track) => {
-    if (!track.preview_url) return;
-    if (playingId === track.id) {
-      audioRef.current?.pause();
-      audioRef.current = null;
-      setPlayingId(null);
-      return;
+  const copyTable = async () => {
+    const { headers, rows } = buildTableRows();
+    // TSV — Excel / Google Sheets / Notion がそのままセルに貼り付けられる
+    const tsv = [headers.join("\t"), ...rows.map((r) => r.join("\t"))].join("\n");
+    try {
+      await navigator.clipboard.writeText(tsv);
+      setCopied(true);
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+      copiedTimerRef.current = setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setError("クリップボードへのコピーに失敗しました。");
     }
-    audioRef.current?.pause();
-    const audio = new Audio(track.preview_url);
-    audio.volume = 0.6;
-    audio.play();
-    audio.onended = () => setPlayingId(null);
-    audioRef.current = audio;
-    setPlayingId(track.id);
   };
 
   if (loading) {
@@ -231,7 +237,7 @@ export default function DashboardClient() {
                   )}
                 </div>
                 <p className="font-medium text-xs truncate">{pl.name}</p>
-                <p className="text-sp-light text-xs mt-0.5">{pl.tracks?.total ?? "—"} 曲</p>
+                <p className="text-sp-light text-xs mt-0.5">{pl.tracks?.total ?? pl.items?.total ?? "—"} 曲</p>
               </button>
             ))}
           </div>
@@ -282,7 +288,32 @@ export default function DashboardClient() {
                   <p className="text-sp-light text-sm py-8 text-center">曲が見つかりません。</p>
                 ) : (
                   <>
-                    <div className="flex justify-end mb-3">
+                    <div className="flex justify-end gap-2 mb-3">
+                      <button
+                        onClick={copyTable}
+                        className={`flex items-center gap-2 text-sm px-4 py-2 rounded-full transition-colors ${
+                          copied
+                            ? "bg-sp-green text-sp-black"
+                            : "bg-sp-gray hover:bg-[#333]"
+                        }`}
+                        title="表をTSV形式でクリップボードにコピー（Excel/スプレッドシートに貼り付け可）"
+                      >
+                        {copied ? (
+                          <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                            </svg>
+                            コピーしました
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                            表をコピー
+                          </>
+                        )}
+                      </button>
                       <button
                         onClick={exportCSV}
                         className="flex items-center gap-2 bg-sp-gray hover:bg-[#333] text-sm px-4 py-2 rounded-full transition-colors"
@@ -353,18 +384,6 @@ export default function DashboardClient() {
                               </td>
                               <td className="py-2 text-sp-light text-right text-xs">
                                 <div className="flex items-center justify-end gap-1.5">
-                                  {track.preview_url && (
-                                    <button
-                                      onClick={() => togglePreview(track)}
-                                      className={`p-1 rounded-full opacity-0 group-hover:opacity-100 transition-all ${playingId === track.id ? "bg-sp-green text-sp-black opacity-100" : "bg-white/10 hover:bg-white/20"}`}
-                                    >
-                                      {playingId === track.id ? (
-                                        <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
-                                      ) : (
-                                        <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                                      )}
-                                    </button>
-                                  )}
                                   <a href={track.external_urls.spotify} target="_blank" rel="noopener noreferrer"
                                     className="opacity-0 group-hover:opacity-100 transition-opacity"
                                     title="Spotifyで開く"
@@ -442,14 +461,6 @@ export default function DashboardClient() {
                               </p>
                             </div>
                             <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                              {track.preview_url && (
-                                <button onClick={() => togglePreview(track)} className={`p-1.5 rounded-full ${playingId === track.id ? "bg-sp-green text-sp-black" : "bg-white/10 hover:bg-white/20"}`}>
-                                  {playingId === track.id
-                                    ? <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
-                                    : <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                                  }
-                                </button>
-                              )}
                               <a href={track.external_urls.spotify} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded-full bg-white/10 hover:bg-white/20">
                                 <SpotifyIcon className="w-3 h-3" />
                               </a>

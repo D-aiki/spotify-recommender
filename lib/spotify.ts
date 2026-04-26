@@ -61,13 +61,27 @@ export async function doRefreshToken(refreshToken: string) {
   return res.json() as Promise<{ access_token: string; expires_in: number }>;
 }
 
+export class SpotifyApiError extends Error {
+  constructor(
+    public status: number,
+    public path: string,
+    public body: string
+  ) {
+    super(`Spotify API ${path} → ${status}: ${body.slice(0, 200)}`);
+    this.name = "SpotifyApiError";
+  }
+}
+
 async function spotifyGet(path: string, accessToken: string) {
   const res = await fetch(`${SPOTIFY_BASE}${path}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
     cache: "no-store",
   });
 
-  if (!res.ok) throw new Error(`Spotify API ${path} → ${res.status}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new SpotifyApiError(res.status, path, body);
+  }
   return res.json();
 }
 
@@ -77,7 +91,7 @@ export async function getUserPlaylists(accessToken: string) {
 
 export async function getPlaylistTracks(playlistId: string, accessToken: string) {
   return spotifyGet(
-    `/playlists/${playlistId}/tracks?limit=100&fields=items(track(id,name,artists(id,name),album(name,images,release_date),external_urls,preview_url,duration_ms))`,
+    `/playlists/${playlistId}/tracks?limit=100&fields=items(track(id,name,artists(id,name),album(name,images,release_date),external_urls,duration_ms))`,
     accessToken
   );
 }

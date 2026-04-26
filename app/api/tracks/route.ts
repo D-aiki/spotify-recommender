@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { getPlaylistTracks, checkSavedTracks, doRefreshToken } from "@/lib/spotify";
+import {
+  getPlaylistTracks,
+  checkSavedTracks,
+  doRefreshToken,
+  SpotifyApiError,
+} from "@/lib/spotify";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -13,11 +18,13 @@ export async function GET(request: NextRequest) {
   const cookieStore = await cookies();
   let accessToken = cookieStore.get("spotify_access_token")?.value;
   const refreshToken = cookieStore.get("spotify_refresh_token")?.value;
+  let tokenRefreshed = false;
 
   if (!accessToken && refreshToken) {
     try {
       const newTokens = await doRefreshToken(refreshToken);
       accessToken = newTokens.access_token;
+      tokenRefreshed = true;
     } catch {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -28,7 +35,21 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const tracksData = await getPlaylistTracks(playlistId, accessToken);
+    // Fetch playlist tracks; on 401, refresh once and retry.
+    let tracksData;
+    try {
+      tracksData = await getPlaylistTracks(playlistId, accessToken);
+    } catch (e) {
+      if (e instanceof SpotifyApiError && e.status === 401 && refreshToken) {
+        const newTokens = await doRefreshToken(refreshToken);
+        accessToken = newTokens.access_token;
+        tokenRefreshed = true;
+        tracksData = await getPlaylistTracks(playlistId, accessToken);
+      } else {
+        throw e;
+      }
+    }
+
     const tracks = (tracksData.items ?? [])
       .filter((i: { track: { id: string } | null }) => i.track?.id)
       .map((i: { track: unknown }) => i.track);
@@ -38,8 +59,13 @@ export async function GET(request: NextRequest) {
     let likedStatus: boolean[] = new Array(tracks.length).fill(false);
     try {
       likedStatus = await checkSavedTracks(trackIds, accessToken);
-    } catch {
+    } catch (e) {
       // user-library-read scope may not be granted yet — re-login required
+      if (e instanceof SpotifyApiError) {
+        console.warn(
+          `checkSavedTracks skipped: ${e.status} ${e.path} ${e.body.slice(0, 120)}`
+        );
+      }
     }
 
     const tracksWithLiked = tracks.map((track: unknown, i: number) => ({
@@ -49,7 +75,7 @@ export async function GET(request: NextRequest) {
 
     const res = NextResponse.json({ tracks: tracksWithLiked, total: tracks.length });
 
-    if (!cookieStore.get("spotify_access_token") && accessToken) {
+    if ((tokenRefreshed || !cookieStore.get("spotify_access_token")) && accessToken) {
       res.cookies.set("spotify_access_token", accessToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
@@ -61,7 +87,13 @@ export async function GET(request: NextRequest) {
 
     return res;
   } catch (err) {
-    console.error("Tracks error:", err);
+    if (err instanceof SpotifyApiError) {
+      console.error(
+        `Tracks error: ${err.status} ${err.path} body=${err.body.slice(0, 300)}`
+      );
+    } else {
+      console.error("Tracks error:", err);
+    }
     return NextResponse.json({ error: "Failed to fetch tracks" }, { status: 500 });
   }
 }
