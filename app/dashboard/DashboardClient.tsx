@@ -209,7 +209,7 @@ export default function DashboardClient() {
                     )}
                   </div>
                   <p className="font-medium text-sm truncate">{pl.name}</p>
-                  <p className="text-sp-light text-xs mt-0.5">{pl.tracks.total} 曲</p>
+                  <p className="text-sp-light text-xs mt-0.5">{pl.tracks?.total ?? 0} 曲</p>
                 </button>
               ))}
             </div>
