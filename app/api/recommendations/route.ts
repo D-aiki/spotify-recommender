@@ -6,6 +6,7 @@ import {
   getArtistTopTracks,
   getAudioFeatures,
   doRefreshToken,
+  SpotifyApiError,
 } from "@/lib/spotify";
 
 interface SpotifyArtist { id: string; name: string; genres?: string[] }
@@ -152,7 +153,13 @@ export async function GET(request: NextRequest) {
 
     return res;
   } catch (err) {
-    console.error("Recommendations error:", err);
+    if (err instanceof SpotifyApiError) {
+      console.error(
+        `Recommendations error: ${err.status} ${err.path} body=${err.body.slice(0, 300)}`
+      );
+    } else {
+      console.error("Recommendations error:", err);
+    }
     return NextResponse.json({ error: "Failed to get recommendations" }, { status: 500 });
   }
 }
