@@ -50,10 +50,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Spotify API 新形式: 旧 i.track → 新 i.item に改名。両方に対応。
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tracks: any[] = (tracksData.items ?? [])
-      .filter((i: { track: { id: string } | null }) => i.track?.id)
-      .map((i: { track: unknown }) => i.track);
+      .filter((i: any) => (i.item ?? i.track)?.id)
+      .map((i: any) => i.item ?? i.track);
 
     const trackIds = tracks.map((t: { id: string }) => t.id);
 
