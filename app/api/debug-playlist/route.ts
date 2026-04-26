@@ -28,26 +28,22 @@ export async function GET(request: NextRequest) {
       cache: "no-store",
     });
     const status = res.status;
-    const body = await res.json().catch(() => res.text());
+    const body = await res.json().catch(() => ({}));
+    const b = body as Record<string, unknown>;
 
-    // tracks フィールドの構造だけ抜粋して返す
-    const tracks = typeof body === "object" && body !== null ? (body as Record<string, unknown>).tracks : undefined;
-    const tracksInfo = tracks && typeof tracks === "object" ? {
-      keys: Object.keys(tracks as object),
-      total: (tracks as Record<string, unknown>).total,
-      itemsLength: Array.isArray((tracks as Record<string, unknown>).items)
-        ? ((tracks as Record<string, unknown>).items as unknown[]).length
-        : "not-array",
-      next: (tracks as Record<string, unknown>).next,
-      firstItem: Array.isArray((tracks as Record<string, unknown>).items) && ((tracks as Record<string, unknown>).items as unknown[]).length > 0
-        ? JSON.stringify(((tracks as Record<string, unknown>).items as unknown[])[0]).slice(0, 300)
-        : null,
-    } : { raw: String(tracks) };
+    function describeField(val: unknown) {
+      if (val === undefined) return "undefined";
+      if (val === null) return "null";
+      if (Array.isArray(val)) return `Array(${val.length}), first=${JSON.stringify(val[0]).slice(0, 200)}`;
+      if (typeof val === "object") return `Object keys=${JSON.stringify(Object.keys(val as object))}, total=${(val as Record<string,unknown>).total}, itemsLen=${Array.isArray((val as Record<string,unknown>).items) ? ((val as Record<string,unknown>).items as unknown[]).length : "n/a"}, next=${(val as Record<string,unknown>).next}`;
+      return String(val);
+    }
 
     return NextResponse.json({
       spotifyStatus: status,
-      topLevelKeys: typeof body === "object" && body !== null ? Object.keys(body as object) : [],
-      tracksInfo,
+      topLevelKeys: Object.keys(b),
+      tracks_field:  describeField(b.tracks),
+      items_field:   describeField(b.items),
     });
   } catch (err) {
     const msg = err instanceof SpotifyApiError
