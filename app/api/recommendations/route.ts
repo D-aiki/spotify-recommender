@@ -48,9 +48,11 @@ export async function GET(request: NextRequest) {
   try {
     // Step 1: Get playlist tracks
     const tracksData = await getPlaylistTracks(playlistId, accessToken);
+    // Spotify API 新形式: 旧 i.track → 新 i.item に改名。両方に対応。
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tracks: SpotifyTrack[] = (tracksData.items ?? [])
-      .filter((i: { track: SpotifyTrack | null }) => i.track?.id)
-      .map((i: { track: SpotifyTrack }) => i.track);
+      .filter((i: any) => (i.item ?? i.track)?.id)
+      .map((i: any) => i.item ?? i.track);
 
     if (!tracks.length) {
       return NextResponse.json({ error: "No tracks in playlist" }, { status: 404 });
