@@ -93,10 +93,11 @@ export async function getPlaylistTracks(playlistId: string, accessToken: string)
   // /playlists/{id}/tracks が 403 を返す新規アプリ制限の回避策:
   // /playlists/{id} でプレイリスト本体を取得し、内包の tracks を使う。
   const data = await spotifyGet(`/playlists/${playlistId}`, accessToken);
-  // Spotify が 2024年以降の新規アプリに対して返すレスポンス構造の違いを吸収:
-  //   旧形式: data.tracks.items  (PagingObject が tracks フィールドに格納)
-  //   新形式: data.items         (items がトップレベルに直接存在)
-  const firstPage = data.tracks ?? data;
+  // Spotify API レスポンス形式の吸収（2024年以降の新規アプリ向け変更）:
+  //   旧形式: data.tracks = PagingObject { items:[...], next, total, ... }
+  //   新形式: data.items  = PagingObject { items:[...], next, total, ... }
+  //           (data.tracks が廃止され data.items に改名。data.items は配列ではなくオブジェクト)
+  const firstPage = data.tracks ?? data.items ?? { items: [], next: null };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const allItems: any[] = [...(firstPage.items ?? [])];
 
