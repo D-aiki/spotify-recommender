@@ -8,6 +8,7 @@ export const SCOPES = [
   "playlist-read-collaborative",
   "user-top-read",
   "user-read-recently-played",
+  "user-library-read",
 ].join(" ");
 
 function basicAuth() {
@@ -95,4 +96,16 @@ export async function getArtistInfo(artistId: string, accessToken: string) {
 
 export async function getAudioFeatures(trackIds: string[], accessToken: string) {
   return spotifyGet(`/audio-features?ids=${trackIds.slice(0, 100).join(",")}`, accessToken);
+}
+
+export async function checkSavedTracks(trackIds: string[], accessToken: string): Promise<boolean[]> {
+  if (!trackIds.length) return [];
+  const batches: string[][] = [];
+  for (let i = 0; i < trackIds.length; i += 50) {
+    batches.push(trackIds.slice(i, i + 50));
+  }
+  const results = await Promise.all(
+    batches.map((batch) => spotifyGet(`/me/tracks/contains?ids=${batch.join(",")}`, accessToken))
+  );
+  return (results as boolean[][]).flat();
 }
