@@ -92,19 +92,9 @@ export async function GET(request: NextRequest) {
       console.error(
         `Tracks error: ${err.status} ${err.path} body=${err.body.slice(0, 300)}`
       );
-      // 診断用: Spotify の実際のエラーをクライアントに返す (修正後に削除)
-      return NextResponse.json(
-        { error: "Failed to fetch tracks", _debug: { spotifyStatus: err.status, path: err.path, body: err.body } },
-        { status: 500 }
-      );
     } else {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error("Tracks error (non-Spotify):", msg);
-      // 診断用: 実際のエラーをクライアントに返す (修正後に削除)
-      return NextResponse.json(
-        { error: "Failed to fetch tracks", _debug: { message: msg } },
-        { status: 500 }
-      );
+      console.error("Tracks error:", err instanceof Error ? err.message : String(err));
     }
+    return NextResponse.json({ error: "Failed to fetch tracks" }, { status: 500 });
   }
 }
