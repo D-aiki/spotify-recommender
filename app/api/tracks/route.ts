@@ -50,7 +50,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const tracks = (tracksData.items ?? [])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tracks: any[] = (tracksData.items ?? [])
       .filter((i: { track: { id: string } | null }) => i.track?.id)
       .map((i: { track: unknown }) => i.track);
 

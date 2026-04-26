@@ -90,10 +90,29 @@ export async function getUserPlaylists(accessToken: string) {
 }
 
 export async function getPlaylistTracks(playlistId: string, accessToken: string) {
-  return spotifyGet(
-    `/playlists/${playlistId}/tracks?limit=100`,
-    accessToken
-  );
+  // /playlists/{id}/tracks が 403 を返す新規アプリ制限の回避策:
+  // /playlists/{id} でプレイリスト本体を取得し、内包の tracks を使う。
+  const data = await spotifyGet(`/playlists/${playlistId}`, accessToken);
+  const firstPage = data.tracks ?? { items: [] };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const allItems: any[] = [...(firstPage.items ?? [])];
+
+  // 100件超のプレイリストは next URL を辿って追加取得を試みる
+  // (next は /playlists/{id}/tracks?offset=... 形式。取得できれば追加、
+  //  制限で失敗しても最初の 100 件だけ返して継続)
+  let nextUrl: string | null = firstPage.next ?? null;
+  while (nextUrl && allItems.length < 500) {
+    const nextPath = nextUrl.replace("https://api.spotify.com/v1", "");
+    try {
+      const page = await spotifyGet(nextPath, accessToken);
+      allItems.push(...(page.items ?? []));
+      nextUrl = page.next ?? null;
+    } catch {
+      break;
+    }
+  }
+
+  return { items: allItems };
 }
 
 export async function getRelatedArtists(artistId: string, accessToken: string) {
