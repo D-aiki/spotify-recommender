@@ -74,7 +74,13 @@ export async function GET(request: NextRequest) {
       liked: likedStatus[i] ?? false,
     }));
 
-    const res = NextResponse.json({ tracks: tracksWithLiked, total: tracks.length });
+    const res = NextResponse.json({
+      tracks: tracksWithLiked,
+      total: tracks.length,
+      // 診断用: raw レスポンス構造の確認 (修正後に削除)
+      _rawKeys: Object.keys(tracksData),
+      _itemsLength: (tracksData.items ?? []).length,
+    });
 
     if ((tokenRefreshed || !cookieStore.get("spotify_access_token")) && accessToken) {
       res.cookies.set("spotify_access_token", accessToken, {
