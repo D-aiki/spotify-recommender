@@ -93,13 +93,14 @@ export async function getPlaylistTracks(playlistId: string, accessToken: string)
   // /playlists/{id}/tracks が 403 を返す新規アプリ制限の回避策:
   // /playlists/{id} でプレイリスト本体を取得し、内包の tracks を使う。
   const data = await spotifyGet(`/playlists/${playlistId}`, accessToken);
-  const firstPage = data.tracks ?? { items: [] };
+  // Spotify が 2024年以降の新規アプリに対して返すレスポンス構造の違いを吸収:
+  //   旧形式: data.tracks.items  (PagingObject が tracks フィールドに格納)
+  //   新形式: data.items         (items がトップレベルに直接存在)
+  const firstPage = data.tracks ?? data;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const allItems: any[] = [...(firstPage.items ?? [])];
 
   // 100件超のプレイリストは next URL を辿って追加取得を試みる
-  // (next は /playlists/{id}/tracks?offset=... 形式。取得できれば追加、
-  //  制限で失敗しても最初の 100 件だけ返して継続)
   let nextUrl: string | null = firstPage.next ?? null;
   while (nextUrl && allItems.length < 500) {
     const nextPath = nextUrl.replace("https://api.spotify.com/v1", "");
