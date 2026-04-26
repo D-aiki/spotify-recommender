@@ -91,7 +91,7 @@ export async function getUserPlaylists(accessToken: string) {
 
 export async function getPlaylistTracks(playlistId: string, accessToken: string) {
   return spotifyGet(
-    `/playlists/${playlistId}/tracks?limit=100&fields=items(track(id,name,artists(id,name),album(name,images,release_date),external_urls,duration_ms))`,
+    `/playlists/${playlistId}/tracks?limit=100`,
     accessToken
   );
 }
